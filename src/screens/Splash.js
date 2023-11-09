@@ -14,6 +14,7 @@ const SplashScreen = () => {
   }, []);
   const checkingLogin = async () => {
     const id = await AsyncStorage.getItem('USERID');
+    console.log('userid',id);
 
     if (id !== null) {
       navigation.navigate('Main');

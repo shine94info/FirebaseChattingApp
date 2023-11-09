@@ -8,28 +8,34 @@ const Chat = () => {
   const [messageList, setMessagesList] = useState([]);
   //chat ko navigation se nikalne ke liye.
   const route = useRoute();
-  useEffect(() => {
-    //for receive msg getting msg in real time
 
+    //for receive msg getting msg in real time
+  useEffect(() => {
     const subscriber = firestore()
       .collection('chats')
       .doc(route.params.id + route.params.data.userId)
       .collection('messages')
-      .orderBy("createdAt", 'desc');
-    subscriber.onSnapshot(querysnapshot => {
-      const allmessages = querysnapshot.docs.map(item => {
-        return { ...item._data, createdAt: item._data.createdAt };
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(querySnapshot => {
+        const allMessages = querySnapshot.docs.map(item => {
+          return { ...item.data, createdAt: item._data.createdAt};
+        });
+        setMessagesList(allMessages);
       });
-      setMessagesList(allmessages);
-    });
-    // return () =>
-    // subscriber();
-
+  
+    // Return the unsubscribe function directly
+    return () => subscriber(); // Change this line to return () => subscriber;
   }, []);
-
+  
+//The messages parameter is an array, and the first message in the array (messages[0]) is retrieved. This assumes that only one message is being sent at a time.
   const onSend = useCallback(async (messages = []) => {
+    console.log('route.param',route.params)
+    console.log('route.params.id',route.params.id)
+    console.log('route.params.data.userId', route.params.data.userId)
     const msg = messages[0];
+    console.log()
     const myMsg = {
+    
       ...msg,
       sendBy: route.params.id,
       sendTo: route.params.data.userId,
@@ -40,12 +46,12 @@ const Chat = () => {
 
     firestore()
       .collection('chats')
-      .doc('' + route.params.id + route.params.data.userId)
+      .doc(`${route.params.id}${route.params.data.userId}`)
       .collection('messages')
       .add(myMsg);
     firestore()
       .collection('chats')
-      .doc('' + route.params.data.userId + route.params.id)
+      .doc(`${route.params.data.userId}${route.params.id}`)
       .collection('messages')
       .add(myMsg);
   }, []);

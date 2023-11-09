@@ -11,35 +11,55 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import {FlatList} from 'react-native-gesture-handler';
-let id = '';
+// let id = '';
 
 const Users = () => {
   const [users, setusers] = useState([]);
-  const [id, setId] = useState('');
 
   const navigation = useNavigation();
   useEffect(() => {
     getUsers();
   }, []);
+  // const getUsers = async () => {
+  //   //empty array
+  //   id=await AsyncStorage.getItem('USERID');
+  //   console.log('id of user',id)
+  //   let tempData = [];
+  //   const email = await AsyncStorage.getItem('EMAIL');
+  //   firestore()
+  //     .collection('users')
+  //     .where('email', '!=', email)
+  //     .get()
+  //     .then(res => {
+  //       if (res.docs != []) {
+  //         res.docs.map(item => {
+  //           tempData.push(item.data());
+  //         });
+  //       }
+  //       setusers(tempData);
+  //       //     console.log(JSON.stringify(res.docs[0].data()));
+  //     });
+  // };
   const getUsers = async () => {
-    //empty array
-    id=await AsyncStorage.getItem('USERID');
+    id = await AsyncStorage.getItem('USERID');
     let tempData = [];
     const email = await AsyncStorage.getItem('EMAIL');
     firestore()
       .collection('users')
       .where('email', '!=', email)
       .get()
-      .then(res => {
-        if (res.docs != []) {
-          res.docs.map(item => {
-            tempData.push(item.data());
+      .then((res) => {
+        if (res.docs.length > 0) {
+          res.docs.forEach((item) => {
+            if (item.data().userId !== id) { // Exclude the current user
+              tempData.push(item.data());
+            }
           });
         }
         setusers(tempData);
-        //     console.log(JSON.stringify(res.docs[0].data()));
       });
-  };
+  }; 
+  
   return (
     <View style={styles.container}>
       <View style={styles.Header}>
@@ -59,7 +79,7 @@ const Users = () => {
                 source={require('../Images/profile.png')}></Image>
               <Text style={styles.userName}>{item.name}</Text>
             </TouchableOpacity>
-          );
+          );          
         }}
       />
     </View>

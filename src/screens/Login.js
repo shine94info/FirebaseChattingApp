@@ -27,7 +27,7 @@ const Login = () => {
       .then(res => {
         setVisible(false);
 
-        if (res.docs!== 0) {
+        if (res.docs !== 0) {
           goToNext(
             res.docs[0].data().name,
             res.docs[0].data().email,
