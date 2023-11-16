@@ -1,4 +1,3 @@
-//import liraries
 import {useNavigation} from '@react-navigation/native';
 import React, {Component, useState} from 'react';
 import {
