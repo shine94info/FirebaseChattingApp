@@ -1,329 +1,20 @@
-import React, {useState, useEffect, useMemo} from 'react';
-import {
-  View,
-  TextInput,
-  Button,
-  RadioButton,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import {Picker} from '@react-native-picker/picker';
-import RadioGroup from 'react-native-radio-buttons-group';
-import DropDownPicker from 'react-native-dropdown-picker';
-
-import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
-
-const FormScreen = ({navigation, route}) => {
-
-  const currentLocationName = route.params?.currentLocationName || ''; 
-
-  const latitude = route.params?.latitude || ''; 
-  const longitude = route.params?.longitude || ''; 
-  
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [address, setAddress] = useState('');
-  const [gender, setGender] = useState('female');
-// const [city, setCity] = useState();
-  const [url, setUrl] = useState('');
-  const [open, setOpen] = useState(false);
-  const [selectedCity, setSelectedCity] = useState(null);
-  const cities = [
-    {label: 'Ahmedabad', value: 'Ahmedabad'},
-    {label: 'Surat', value: 'Surat'},
-    // Add more cities as needed
-  ];
-
-  const [uploadimage, setUploadImage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    //setIsLoading(false);
-    if (route.params && route.params.employee) {
-      console.log(route.params.employee);
-      const {name, email, mobile, address, gender, selectedCity, imageUrl} =
-        route.params.employee;
-      setName(name);
-      setEmail(email);
-      setMobile(mobile);
-      setAddress(address);
-      setGender(gender);
-      setSelectedCity(selectedCity);
-      setUrl(imageUrl || '');
-    }
-    
-  }, [route.params]);
-
-  const handleImageUpload = async () => {
-    const options = {
-      title: 'Select Image',
-      storageOptions: {
-        skipBackup: true,
-        path: 'images',
-      },
-    };
-    launchImageLibrary(options, response => {
-      setIsLoading(true);
-      console.log('Response = ', response);
-
-      if (response.didCancel) {
-        console.log('User cancelled image picker');
-        setIsLoading(false);
-      } else if (response.error) {
-        console.log('ImagePicker Error: ', response.error);
-        setIsLoading(false);
-      } else {
-        const uri = response.assets[0].uri;
-        console.log('uri????', uri);
-        const filename = uri.substring(uri.lastIndexOf('/'));
-        console.log('filename', filename);
-
-        // Upload the image to Firebase storage
-        const reference = storage().ref(`images/${filename}`);
-        const task = reference.putFile(uri);
-
-        task.on('state_changed', taskSnapshot => {
-          if (taskSnapshot.bytesTransferred === taskSnapshot.totalBytes) {
-            setIsLoading(false);
-          }
-        });
-
-        task
-          .then(async () => {
-            console.log('Image uploaded to the bucket!');
-
-            // Get the image URL
-            try {
-              const downloadURL = await storage()
-                .ref(`images/${filename}`)
-                .getDownloadURL();
-              console.log('Image URL:', downloadURL);
-              setUploadImage(downloadURL);
-              setUrl(downloadURL);
-            } catch (error) {
-              console.error('Error getting download URL: ', error);
-            }
-          })
-          .catch(error => {
-            console.error('Error uploading image to storage: ', error);
-          });
-      }
-    });
-  };
-
-  const submitForm = () => {
-    if (!name || !email || !mobile || !address || !selectedCity) {
-      alert('Please fill in all fields');
-      return;
-    }
-    if (!validateEmail(email)) {
-      alert('Please enter a valid email address');
-      return;
-    }
-    if (!validateMobile(mobile)) {
-      alert('Please enter a valid mobile number');
-      return;
-    }
-  
-    const data = {
-      name,
-      email,
-      mobile,
-      address,
-      gender,
-      selectedCity,
-      imageUrl: url,
-      currentLocationName: currentLocationName,
-      latitude:latitude,
-      longitude:longitude
-    
-    };
-    console.log('data', data);
-
-    if (route.params && route.params.employee) {
-      const {id} = route.params.employee;
-      console.log('Employee ID:', id);
-
-      firestore()
-        .collection('employees')
-        .doc(id)
-        .update(data)
-        .then(() => {
-          console.log('Employee updated!');
-          navigation.navigate('CardData');
-          setUrl(''); 
-        })
-        .catch(error => {
-          console.error('Error updating employee: ', error);
-        });
-    } else {
-      firestore()
-        .collection('employees')
-        .add(data)
-        .then(() => {
-          console.log('Employee added!');
-          navigation.navigate('CardData');
-        })
-        .catch(error => {
-          console.error('Error adding employee: ', error);
-        });
-    }
-  };
-
-  const validateEmail = email => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-  const validateMobile = mobile => {
-    return /^[0-9]{10}$/.test(mobile);
-  };
-  const radioButtons = useMemo(
-    () => [
-      {
-        id: 1,
-        label: 'female',
-        value: 'female',
-      },
-      {
-        id: 2,
-        label: 'male',
-        value: 'male',
-      },
-    ],
-    [],
-  );
-  const sendData = () => {
-    navigation.navigate('CardData');
-  };
-
-  return (
-    <View style={{flex: 1, padding: 20}}>
-      <TouchableOpacity onPress={sendData}>
-        <Text style={{textAlign: 'right', fontSize: 20, color: 'black'}}>
-          List
-        </Text>
-      </TouchableOpacity>
-
-      <TextInput
-        style={styles.Textinput}
-        placeholder="Name"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.Textinput}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.Textinput}
-        placeholder="Mobile"
-        value={mobile}
-        onChangeText={setMobile}
-        keyboardType="numeric"
-      />
-      <TextInput
-        style={styles.Textinput}
-        placeholder="Address"
-        value={address}
-        onChangeText={setAddress}
-      />
-      <Text>Gender:</Text>
-      <RadioGroup
-        radioButtons={radioButtons}
-        onPress={setGender}
-        selectedId={gender}
-      />
-      <DropDownPicker
-        open={open}
-        value={selectedCity}
-        items={cities}
-        setOpen={setOpen}
-        setValue={setSelectedCity}
-        style={{marginTop: 20}}
-        placeholder="Select a city"
-        dropDownContainerStyle={{marginTop: 2}}
-      />
-      <View style={styles.btn}>
-        <Button title="Choose Image" onPress={handleImageUpload} />
-      </View>
-
-      {/* <View style={styles.btn}>
-          {isLoading ? (
-            <ActivityIndicator size="large" color="#0000ff" />
-          ) : (
-            <Button title="Submit" onPress={submitForm} />
-          )}
-        </View> */}
-        <View style={styles.buttonContainer}>
-        {isLoading ? (
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#0000ff" />
-            <Text style={styles.loaderText}>Uploading Image...</Text>
-          </View>
-        ) : (
-          <Button title="Submit" onPress={submitForm} />
-        )}
-      </View>
-      {/* <TouchableOpacity style={{}} onPress={sendData}>
-        <Text style={{textAlign: 'right', fontSize: 20}}>List</Text>
-      </TouchableOpacity> */}
-      {/* <Image source={{uri:url}} style={{height:200,width:200,}} ></Image> */}
-    </View>
-  );
-};
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  Textinput: {
-    borderWidth: 1,
-    height: 50,
-    marginTop: 20,
-  },
-  btn: {
-    marginTop: 20,
-  },
-  buttonContainer: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  loaderContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  loaderText: {
-    marginLeft: 10,
-    fontSize: 16,
-  },
-});
-export default FormScreen;
-
-
-
-
 import React, { useCallback, useState, useEffect } from 'react';
 import { useRoute } from '@react-navigation/native';
-import { View, Text, StyleSheet, FlatList, TextInput, Button, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, Button, TouchableOpacity, Image } from 'react-native';
 import { GiftedChat } from 'react-native-gifted-chat';
 import firestore from '@react-native-firebase/firestore';
 import DocumentPicker from 'react-native-document-picker'
 import storage from '@react-native-firebase/storage';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
-
 const Chat = () => {
   const [messageList, setMessagesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-
+  const [url, setUrl] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [inputMessage, setInputMessage] = useState();
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImage, setUploadImage] = useState(null);
+  
   //chat ko navigation se nikalne ke liye.
   const route = useRoute();
 
@@ -379,41 +70,16 @@ const Chat = () => {
   // const pickDocument = async () => {
   //   try {
   //     const result = await DocumentPicker.pick({
-  //       allowMultiSelection: false,
   //       type: [DocumentPicker.types.allFiles],
   //     });
 
-  //     let res = result[0]
-  //     console.log('result',result[0], res)
-
-  //     const fileUri = Platform.OS === 'android' ? res.uri : res.uri.replace('file://', '');
-
-  //     console.log('fileUri',fileUri)
-  //     uploadFile(fileUri, res.name);
+  //     const fileUri = Platform.OS === 'android' ? result.uri : result.uri.replace('file://', '');
+  //     uploadFile(fileUri, result.name);
   //   } catch (err) {
   //     console.log('DocumentPicker Error:', err);
   //   }
   // };
-  // const pickDocument = () => {
 
-  //   launchImageLibrary(
-  //     {
-  //       mediaType: 'photo',
-  //     },
-  //     response => {
-  //       console.log('response', response)
-  //       if (response.didCancel) {
-  //         console.log('User cancelled image picker');
-  //       } else if (response.error) {
-  //         console.log('ImagePicker Error: ', response.error);
-  //       } else if (response.assets && response.assets.length > 0) {
-  //         const { uri, type } = response.assets[0];
-  //         console.log('uri', uri);
-  //         setSelectedImage(uri, type);
-  //       }
-  //     }
-  //   );
-  // };
   const pickDocument = async () => {
     const options = {
       title: 'Select Image',
@@ -451,6 +117,7 @@ const Chat = () => {
         task
           .then(async () => {
             console.log('Image uploaded to the bucket!');
+            setIsLoading(false);
 
             // Get the image URL
             try {
@@ -460,6 +127,34 @@ const Chat = () => {
               console.log('Image URL:', downloadURL);
               setUploadImage(downloadURL);
               setUrl(downloadURL);
+
+              // Move the code below to update the state outside the try block
+              const msg = {
+                text: inputMessage || '',
+                image: downloadURL,
+                sendBy: route.params.id,
+                sendTo: route.params.data.userId,
+                createdAt: new Date().toISOString(),
+                createdAtNano: new Date().valueOf() * 1000000,
+              };
+
+              // Add the message to Firestore
+              firestore()
+                .collection('chats')
+                .doc(`${route.params.id}${route.params.data.userId}`)
+                .collection('messages')
+                .add(msg);
+
+              firestore()
+                .collection('chats')
+                .doc(`${route.params.data.userId}${route.params.id}`)
+                .collection('messages')
+                .add(msg);
+
+              // Update local state to display the sent message
+              setMessagesList((prevMessages) => [...prevMessages, msg]);
+              setInputMessage('');
+              setUploadImage(null);
             } catch (error) {
               console.error('Error getting download URL: ', error);
             }
@@ -470,143 +165,110 @@ const Chat = () => {
       }
     });
   };
-
-  // const onSendMessage = async () => {
-  //   if (inputMessage.trim() === '') {
-  //     return;
-  //   }
-  //   let imageUrl = null;
-  //   if (selectedImage) {
-  //     imageUrl = await uploadImage(selectedImage);
-  //   }
-
-  //   const msg = {
-  //     text: inputMessage,
-  //     image: imageUrl,
-  //     sendBy: route.params.id,
-  //     sendTo: route.params.data.userId,
-  //     createdAt: new Date().toISOString(),
-  //   };
-
-  //   // Add the message to Firestore
-  //   firestore()
-  //     .collection('chats')
-  //     .doc(`${route.params.id}${route.params.data.userId}`)
-  //     .collection('messages')
-  //     .add(msg);
-
-  //   firestore()
-  //     .collection('chats')
-  //     .doc(`${route.params.data.userId}${route.params.id}`)
-  //     .collection('messages')
-  //     .add(msg);
-
-  //   // Update local state to display the sent message
-  //   setMessagesList(prevMessages => [...prevMessages, msg]);
-  //   setInputMessage('');
-  //   setSelectedImage(null);
-  // };
-
   const onSendMessage = async () => {
-    if (inputMessage.trim() === '') {
+
+    if (isSending || (!inputMessage.trim() && !selectedImage)) {
       return;
     }
-    
+
+    setIsSending(true);
+
+
+    let imageUrl = null;
+
+    // Check if an image is selected
     if (selectedImage) {
-      imageUrl = await uploadFile(selectedImage.uri, `image_${Date.now()}`, selectedImage.type);
-      console.log('imageUrl::::::',imageUrl)
-      setSelectedImage(null);
+      // Generate a unique filename for the image
+      const filename = `image_${new Date().getTime()}.jpg`;
+
+      // Upload the image and get the URL
+      imageUrl = await uploadFile(selectedImage, filename);
     }
-  
+
     const msg = {
-      text: inputMessage,
+      text: inputMessage || '', // Use an empty string if inputMessage is undefined
       image: imageUrl,
       sendBy: route.params.id,
       sendTo: route.params.data.userId,
       createdAt: new Date().toISOString(),
+      createdAtNano: new Date().valueOf() * 1000000,
     };
-  
-    // Add the message to Firestoreg
-    await firestore()
+
+    // Add the message to Firestore
+    firestore()
       .collection('chats')
       .doc(`${route.params.id}${route.params.data.userId}`)
       .collection('messages')
       .add(msg);
-  
-    await firestore()
+
+    firestore()
       .collection('chats')
       .doc(`${route.params.data.userId}${route.params.id}`)
       .collection('messages')
       .add(msg);
-  
+
     // Update local state to display the sent message
-    setMessagesList(prevMessages => [...prevMessages, msg]);
+    setMessagesList((prevMessages) => [...prevMessages, msg]);
     setInputMessage('');
+    setUploadImage(null);
+    setIsSending(false);
   };
-  
+
   const renderTime = createdAt => {
     const date = new Date(createdAt);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-
   const uploadFile = async (uri, fileName) => {
+
     try {
-      const response = await fetch(uri);
+      // const response = await fetch(uri);
+      const response = await fetch(uri, { timeout: 60000 });
       const blob = await response.blob();
 
       const storageRef = storage().ref().child(`files/${fileName}`);
-      const uploadTask = storageRef.put(blob);
+      await storageRef.put(blob);
 
-      uploadTask.on('state_changed',
-        (snapshot) => {
-          // Track the upload progress if needed
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log(`Upload is ${progress}% done`);
+      const fileUrl = await storageRef.getDownloadURL();
+
+      const msg = {
+        file: {
+          name: fileName,
+          url: fileUrl,
         },
-        (error) => {
-          console.error('File Upload Error:', JSON.stringify(error));
-        },
-        async () => {
-          // Upload complete, get the file URL
-          const fileUrl = await storageRef.getDownloadURL();
+        sendBy: route.params.id,
+        sendTo: route.params.data.userId,
+        createdAt: new Date().toISOString(),
+      };
 
-          const msg = {
-            file: {
-              name: fileName,
-              url: fileUrl,
+      await firestore()
+        .collection('chats')
+        .doc(`${route.params.id}${route.params.data.userId}`)
+        .collection('messages')
+        .add(msg);
 
-            },
-            sendBy: route.params.id,
-            sendTo: route.params.data.userId,
-            createdAt: new Date().toISOString(),
-          };
+      await firestore()
+        .collection('chats')
+        .doc(`${route.params.data.userId}${route.params.id}`)
+        .collection('messages')
+        .add(msg);
 
-          // Add the file message to Firestore
-          await firestore()
-            .collection('chats')
-            .doc(`${route.params.id}${route.params.data.userId}`)
-            .collection('messages')
-            .add(msg);
-
-          await firestore()
-            .collection('chats')
-            .doc(`${route.params.data.userId}${route.params.id}`)
-            .collection('messages')
-            .add(msg);
-
-          // Update local state to display the sent message
-
-          setMessagesList(prevMessages => [...prevMessages, msg]);
-        }
-      );
+      setMessagesList(prevMessages => [...prevMessages, msg]);
     } catch (error) {
       console.error('File Upload Error:', error);
     }
   };
-
   return (
     <View style={styles.container}>
+      {/* <GiftedChat
+        messages={messageList}
+        onSend={messages => onSend(messages)}
+        user={{
+          _id: route.params.id,
+        }}
+        
+      /> */}
       <View style={styles.container}>
+        <View></View>
         <FlatList
           data={messageList}
           keyExtractor={item => item.id}
@@ -615,36 +277,53 @@ const Chat = () => {
               <View style={[styles.messageContainer, item.sendBy === route.params.data.userId ? styles.receivedMessage : styles.sentMessage]}>
                 {item.text && <Text>{item.text}</Text>}
                 {item.file && (
-
-
-
                   <TouchableOpacity onPress={() => console.log('Open file:', item.file.url)}>
                     <Text>{item.file.name}</Text>
                   </TouchableOpacity>
                 )}
-                {item.image && <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />}
+                {item.image && (
+                  <TouchableOpacity onPress={() => setUploadImage(item.image)}>
+
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color="#0000ff" />
+                    ) : (
+                      <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {/* {item.image && <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />} */}
+                {item.file?.url && <Image source={{ uri: item.file?.url }} style={{ width: 200, height: 200 }} />}
                 <Text>{renderTime(item.createdAt)}</Text>
               </View>
+
             );
           }}
         />
         <View style={styles.inputContainer}>
-          <TouchableOpacity onPress={pickDocument}>
-            <Text style={{ color: 'white', marginLeft: 10 }}>File</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            multiline={true}
-            placeholder="Type a message..."
-            value={inputMessage}
-            onChangeText={text => setInputMessage(text)}
-          />
-          <TouchableOpacity onPress={onSendMessage}>
-            <Text>Send</Text>
-          </TouchableOpacity>
+          {isLoading ? (
+            <View style={styles.inputContainer}>
+              <Text>Uploading Image...</Text>
+            </View>
+          ) : (
+            <View style={styles.inputContainer}>
+              <TouchableOpacity onPress={pickDocument}>
+                <Text>File</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                multiline={true}
+                placeholder="Type a message..."
+                value={inputMessage}
+                onChangeText={text => setInputMessage(text)}
+              />
+              <TouchableOpacity onPress={onSendMessage} disabled={isSending || (!inputMessage && !selectedImage)}>
+                <Text>Send</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
-
     </View>
   );
 };
@@ -683,5 +362,410 @@ const styles = StyleSheet.create({
   {
     width: '85%'
   }
+});
+export default Chat;
+import React, { useCallback, useState, useEffect } from 'react';
+import { useRoute } from '@react-navigation/native';
+import { View, Text, StyleSheet, FlatList, TextInput, Button, TouchableOpacity, Image, ActivityIndicator, Modal } from 'react-native';
+import { GiftedChat } from 'react-native-gifted-chat';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+
+const Chat = () => {
+
+  const [messageList, setMessagesList] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [url, setUrl] = useState('');
+  const [inputMessage, setInputMessage] = useState();
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isImageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedVideo,setSelectedVideo] = useState(null)
+
+
+  //chat ko navigation se nikalne ke liye.
+  const route = useRoute();
+
+  const openImageModal = (image) => {
+    setSelectedImage(image);
+    setImageModalVisible(true);
+  };
+
+  const CloseImageModel = () => {
+    setSelectedImage(null);
+    setImageModalVisible(false);
+  }
+
+  //for receive msg getting msg in real time
+  useEffect(() => {
+    const subscriber = firestore()
+      .collection('chats')
+      .doc(route.params.id + route.params.data.userId)
+      .collection('messages')
+      .orderBy('createdAt', 'asc')
+      .onSnapshot(querySnapshot => {
+        const allMessages = querySnapshot.docs.map(item => {
+          // return { ...item.data, createdAt: item._data.createdAt };
+          return { ...item.data(), id: item.id };
+        });
+        setMessagesList(allMessages);
+      });
+
+    // Return the unsubscribe function directly
+    return () => subscriber(); // Change this line to return () => subscriber;
+  }, []);
+
+  const pickDocument = async () => {
+    const options = {
+      title: 'Select Media',
+      mediaType: 'mixed', // 'photo' for images, 'video' for videos, 'mixed' for both
+      storageOptions: {
+        skipBackup: true,
+        path: 'media',
+      },
+    };
+  
+    launchImageLibrary(options, async response => {
+      if (response.didCancel) {
+        console.log('User cancelled media picker');
+      } else if (response.error) {
+        console.log('Media Picker Error: ', response.error);
+      } else {
+        if (response.assets[0].type.startsWith('image')) {
+          // Handle image upload
+          const uri = response.assets[0].uri;
+  
+          // Upload the image to Firebase storage
+          const filename = uri.substring(uri.lastIndexOf('/'));
+          const reference = storage().ref(`images/${filename}`);
+          const task = reference.putFile(uri);
+  
+          task.on('state_changed', taskSnapshot => {
+            if (taskSnapshot.bytesTransferred === taskSnapshot.totalBytes) {
+              setIsLoading(false);
+            }
+          });
+          setIsLoading(true);
+  
+          task
+            .then(async () => {
+              console.log('Image uploaded to the bucket!');
+  
+              // Get the image URL
+              try {
+                const downloadURL = await storage()
+                  .ref(`images/${filename}`)
+                  .getDownloadURL();
+                console.log('Image URL:', downloadURL);
+  
+                // Update local state to display the sent message
+                setMessagesList(prevMessages => [
+                  ...prevMessages,
+                  {
+                    text: inputMessage || '',
+                    image: downloadURL,
+                    sendBy: route.params.id,
+                    sendTo: route.params.data.userId,
+                    createdAt: new Date().toISOString(),
+                    type: 'image',
+                  },
+                ]);
+  
+                setInputMessage('');
+                setSelectedImage(null);
+                setIsLoading(false);
+              } catch (error) {
+                console.error('Error getting download URL: ', error);
+                setIsLoading(false);
+              }
+            })
+            .catch(error => {
+              console.error('Error uploading image to storage: ', error);
+              setIsLoading(false);
+            });
+        } else if (response.assets[0].type.startsWith('video')) {
+          // Handle video upload
+          const videoUri = response.assets[0].uri;
+  
+          // Upload the video to Firebase storage
+          const filename = videoUri.substring(videoUri.lastIndexOf('/'));
+          const reference = storage().ref(`videos/${filename}`);
+          const task = reference.putFile(videoUri);
+  
+          task.on('state_changed', taskSnapshot => {
+            if (taskSnapshot.bytesTransferred === taskSnapshot.totalBytes) {
+              setIsLoading(false);
+            }
+          });
+          setIsLoading(true);
+  
+          task
+            .then(async () => {
+              console.log('Video uploaded to the bucket!');
+  
+              // Get the video URL
+              try {
+                const downloadURL = await storage()
+                  .ref(`videos/${filename}`)
+                  .getDownloadURL();
+                console.log('Video URL:', downloadURL);
+  
+                // Update local state to display the sent message
+                setMessagesList(prevMessages => [
+                  ...prevMessages,
+                  {
+                    text: inputMessage || '',
+                    video: downloadURL,
+                    sendBy: route.params.id,
+                    sendTo: route.params.data.userId,
+                    createdAt: new Date().toISOString(),
+                    type: 'video',
+                  },
+                ]);
+  
+                setInputMessage('');
+                setSelectedVideo(null);
+                setIsLoading(false);
+              } catch (error) {
+                console.error('Error getting download URL for video: ', error);
+                setIsLoading(false);
+              }
+            })
+            .catch(error => {
+              console.error('Error uploading video to storage: ', error);
+              setIsLoading(false);
+            });
+        }
+      }
+    });
+  };
+  
+  const onSendMessage = async () => {
+
+    if ((!inputMessage.trim() && !selectedImage && !selectedVideo)) {
+      return;
+    }
+    let imageUrl = null;
+    let videoUrl = null;
+
+    // Check if an image is selected
+    if (selectedImage) {
+      // Generate a unique filename for the image
+      const filename = `image_${new Date().getTime()}.jpg`;
+
+      // Upload the image and get the URL
+      imageUrl = await uploadFile(selectedImage, filename);
+    }
+    else if(selectedVideo){
+      const videoFilename = `video_${new Date().getTime()}.mp4`;
+
+      videoUrl = await uploadFile(selectedVideo,videoFilename)
+
+    }
+
+    const msg = {
+      text: inputMessage || '', // Use an empty string if inputMessage is undefined
+      image: imageUrl,
+      video: videoUrl,
+      sendBy: route.params.id,
+      sendTo: route.params.data.userId,
+      createdAt: new Date().toISOString(),
+      type: imageUrl ? 'image' : videoUrl ? 'video' : 'text',
+    };
+
+    // Add the message to Firestore
+    firestore()
+      .collection('chats')
+      .doc(`${route.params.id}${route.params.data.userId}`)
+      .collection('messages')
+      .add(msg);
+
+    firestore()
+      .collection('chats')
+      .doc(`${route.params.data.userId}${route.params.id}`)
+      .collection('messages')
+      .add(msg);
+
+    // Update local state to display the sent message
+    setMessagesList((prevMessages) => [...prevMessages, msg]);
+    setInputMessage('');
+    setSelectedImage(null);
+    setSelectedVideo(null);
+  };
+
+  const renderTime = createdAt => {
+    const date = new Date(createdAt);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  const uploadFile = async (uri, fileName) => {
+    try {
+      // const response = await fetch(uri);
+      const response = await fetch(uri, { timeout: 60000 });
+      const blob = await response.blob();
+
+      const storageRef = storage().ref().child(`files/${fileName}`);
+      await storageRef.put(blob);
+
+      const fileUrl = await storageRef.getDownloadURL();
+
+      const msg = {
+        file: {
+          name: fileName,
+          url: fileUrl,
+        },
+        sendBy: route.params.id,
+        sendTo: route.params.data.userId,
+        createdAt: new Date().toISOString(),
+        type: 'image',
+      };
+
+      await firestore()
+        .collection('chats')
+        .doc(`${route.params.id}${route.params.data.userId}`)
+        .collection('messages')
+        .add(msg);
+
+      await firestore()
+        .collection('chats')
+        .doc(`${route.params.data.userId}${route.params.id}`)
+        .collection('messages')
+        .add(msg);
+
+      setMessagesList(prevMessages => [...prevMessages, msg]);
+    } catch (error) {
+      console.error('File Upload Error:', error);
+    }
+
+  };
+  return (
+    <View style={styles.container}>
+      <View style={styles.container}>
+
+        <FlatList
+          data={messageList}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => {
+            return (
+              <View style={[styles.messageContainer, item.sendBy === route.params.data.userId ? styles.receivedMessage : styles.sentMessage]}>
+                {item.text && <View style={{ flexDirection: 'row' }}>
+                  <Text>{item.text}</Text>
+                  <Text style={{ marginTop: 6, fontSize: 12 }}>{renderTime(item.createdAt)}</Text>
+                </View>
+                }
+                {item.image && <View style={{ flexDirection: 'row' }}>
+                  <TouchableOpacity onPress={() => openImageModal(item.image)}>
+                    <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />
+
+                    <Text style={{ marginTop: 6, fontSize: 12, alignSelf: 'flex-end' }}>{renderTime(item.createdAt)}</Text>
+                  </TouchableOpacity>
+                </View>
+                }
+                 {item.video && (
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity onPress={() => openImageModal(item.video, 'video')}>
+              {/* You can use a placeholder for video thumbnail */}
+              <Image source={{ uri: 'placeholder_image_url' }} style={{ width: 200, height: 200 }} />
+              <Text style={{ marginTop: 6, fontSize: 12, alignSelf: 'flex-end' }}>{renderTime(item.createdAt)}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+              </View>
+
+            );
+          }}
+        />
+
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={isImageModalVisible}
+          onRequestClose={CloseImageModel}>
+          <View style={styles.modalContainer}>
+            <Image source={{ uri: selectedImage }} style={{ height: '100%', width: '100%' }} resizeMode="contain" >
+
+            </Image>
+            <TouchableOpacity onPress={CloseImageModel} style={styles.closeButton}>
+              <Text style={{ color: 'white' }}>Close</Text>
+            </TouchableOpacity>
+
+          </View>
+        </Modal>
+
+
+        <View style={styles.inputContainer}>
+          {isLoading ? (
+            <View style={styles.messageContainer}>
+              <Text style={{ textAlign: 'center' }}>Uploading Image...</Text>
+            </View>
+          ) : (
+            <View style={styles.inputContainer}>
+              <TouchableOpacity onPress={pickDocument}>
+                <Text>File</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                multiline={true}
+                placeholder="Type a message..."
+                value={inputMessage}
+                onChangeText={text => setInputMessage(text)}
+              />
+              <TouchableOpacity onPress={onSendMessage} disabled={(!inputMessage && !selectedImage)}>
+                <Text>Send</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 10,
+    backgroundColor: 'grey'
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'grey',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageContainer: {
+    padding: 10,
+    borderColor: '#ccc',
+    marginBottom: 10,
+    maxWidth: '80%',
+    borderRadius: 10,
+    backgroundColor: 'pink'
+  },
+  sentMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#DCF8C6',
+  },
+  receivedMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0E0E0',
+  },
+  inputContainer:
+  {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'pink',
+    borderRadius: 30
+  },
+  input:
+  {
+    width: '85%'
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    padding: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
 });
 export default Chat;

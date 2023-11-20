@@ -1,24 +1,33 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useRoute } from '@react-navigation/native';
-import { View, Text, StyleSheet, FlatList, TextInput, Button, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, Button, TouchableOpacity, Image, ActivityIndicator, Modal } from 'react-native';
 import { GiftedChat } from 'react-native-gifted-chat';
 import firestore from '@react-native-firebase/firestore';
-import DocumentPicker from 'react-native-document-picker'
 import storage from '@react-native-firebase/storage';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import Loader from '../components/Loader';
-
 
 const Chat = () => {
+
   const [messageList, setMessagesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [url, setUrl] = useState('');
-
-
   const [inputMessage, setInputMessage] = useState();
-  const [selectedImage, setUploadImage] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isImageModalVisible, setImageModalVisible] = useState(false);
+
+
   //chat ko navigation se nikalne ke liye.
   const route = useRoute();
+
+  const openImageModal = (image) => {
+    setSelectedImage(image);
+    setImageModalVisible(true);
+  };
+
+  const CloseImageModel = () => {
+    setSelectedImage(null);
+    setImageModalVisible(false);
+  }
 
   //for receive msg getting msg in real time
   useEffect(() => {
@@ -39,50 +48,8 @@ const Chat = () => {
     return () => subscriber(); // Change this line to return () => subscriber;
   }, []);
 
-  //The messages parameter is an array, and the first message in the array (messages[0]) is retrieved. This assumes that only one message is being sent at a time.
-  // const onSend = useCallback(async (messages = []) => {
-  //   console.log('route.param', route.params)
-  //   console.log('route.params.id', route.params.id)
-  //   console.log('route.params.data.userId', route.params.data.userId)
-  //   const msg = messages[0];
-  //   console.log()
-  //   const myMsg = {
-
-  //     ...msg,
-  //     sendBy: route.params.id,
-  //     sendTo: route.params.data.userId,
-  //     createdAt: Date.parse(msg.createdAt),
-  //   };
-
-  //   setMessagesList(previousMessages => GiftedChat.append(previousMessages, myMsg));
-
-  //   firestore()
-  //     .collection('chats')
-  //     .doc(`${route.params.id}${route.params.data.userId}`)
-  //     .collection('messages')
-  //     .add(myMsg);
-  //   firestore()
-  //     .collection('chats')
-  //     .doc(`${route.params.data.userId}${route.params.id}`)
-  //     .collection('messages')
-  //     .add(myMsg);
-  // }, []);
-
-
-  // const pickDocument = async () => {
-  //   try {
-  //     const result = await DocumentPicker.pick({
-  //       type: [DocumentPicker.types.allFiles],
-  //     });
-
-  //     const fileUri = Platform.OS === 'android' ? result.uri : result.uri.replace('file://', '');
-  //     uploadFile(fileUri, result.name);
-  //   } catch (err) {
-  //     console.log('DocumentPicker Error:', err);
-  //   }
-  // };
-
   const pickDocument = async () => {
+
     const options = {
       title: 'Select Image',
       storageOptions: {
@@ -90,17 +57,17 @@ const Chat = () => {
         path: 'images',
       },
     };
+
     launchImageLibrary(options, response => {
-      setIsLoading(true);
+
       console.log('Response = ', response);
 
       if (response.didCancel) {
         console.log('User cancelled image picker');
-        setIsLoading(false);
       } else if (response.error) {
         console.log('ImagePicker Error: ', response.error);
-        setIsLoading(false);
       } else {
+
         const uri = response.assets[0].uri;
         console.log('uri????', uri);
         const filename = uri.substring(uri.lastIndexOf('/'));
@@ -115,11 +82,11 @@ const Chat = () => {
             setIsLoading(false);
           }
         });
+        setIsLoading(true);
 
         task
           .then(async () => {
             console.log('Image uploaded to the bucket!');
-            setIsLoading(false);
 
             // Get the image URL
             try {
@@ -127,24 +94,51 @@ const Chat = () => {
                 .ref(`images/${filename}`)
                 .getDownloadURL();
               console.log('Image URL:', downloadURL);
-              setUploadImage(downloadURL);
+              setSelectedImage(downloadURL);
               setUrl(downloadURL);
+
+              // Move the code below to update the state outside the try block
+              const msg = {
+                text: inputMessage || '',
+                image: downloadURL,
+                sendBy: route.params.id,
+                sendTo: route.params.data.userId,
+                createdAt: new Date().toISOString(),
+                Type: downloadURL ? 'image' : 'text'
+              };
+
+              // Add the message to Firestore
+              firestore()
+                .collection('chats')
+                .doc(`${route.params.id}${route.params.data.userId}`)
+                .collection('messages')
+                .add(msg);
+
+              firestore()
+                .collection('chats')
+                .doc(`${route.params.data.userId}${route.params.id}`)
+                .collection('messages')
+                .add(msg);
+
+              // Update local state to display the sent message
+              setMessagesList((prevMessages) => [...prevMessages, msg]);
+              setInputMessage('');
+              setSelectedImage(null);
             } catch (error) {
               console.error('Error getting download URL: ', error);
             }
           })
           .catch(error => {
             console.error('Error uploading image to storage: ', error);
-          });
+          })
       }
     });
   };
   const onSendMessage = async () => {
-    if (inputMessage.trim() === '' && !selectedImage) {
-      // No message or image to send
+
+    if ((!inputMessage.trim() && !selectedImage)) {
       return;
     }
-
     let imageUrl = null;
 
     // Check if an image is selected
@@ -162,7 +156,7 @@ const Chat = () => {
       sendBy: route.params.id,
       sendTo: route.params.data.userId,
       createdAt: new Date().toISOString(),
-      createdAtNano: new Date().valueOf() * 1000000,
+      type: imageUrl ? 'image' : 'text',
     };
 
     // Add the message to Firestore
@@ -181,7 +175,7 @@ const Chat = () => {
     // Update local state to display the sent message
     setMessagesList((prevMessages) => [...prevMessages, msg]);
     setInputMessage('');
-    setUploadImage(null);
+    setSelectedImage(null);
   };
 
   const renderTime = createdAt => {
@@ -189,7 +183,6 @@ const Chat = () => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   const uploadFile = async (uri, fileName) => {
-
     try {
       // const response = await fetch(uri);
       const response = await fetch(uri, { timeout: 60000 });
@@ -208,6 +201,7 @@ const Chat = () => {
         sendBy: route.params.id,
         sendTo: route.params.data.userId,
         createdAt: new Date().toISOString(),
+        type: 'image',
       };
 
       await firestore()
@@ -226,67 +220,78 @@ const Chat = () => {
     } catch (error) {
       console.error('File Upload Error:', error);
     }
+
   };
   return (
     <View style={styles.container}>
-      {/* <GiftedChat
-        messages={messageList}
-        onSend={messages => onSend(messages)}
-        user={{
-          _id: route.params.id,
-        }}
-        
-      /> */}
       <View style={styles.container}>
-        <View></View>
+
         <FlatList
           data={messageList}
           keyExtractor={item => item.id}
           renderItem={({ item }) => {
             return (
               <View style={[styles.messageContainer, item.sendBy === route.params.data.userId ? styles.receivedMessage : styles.sentMessage]}>
-                {item.text && <Text>{item.text}</Text>}
-                {item.file && (
-                  <TouchableOpacity onPress={() => console.log('Open file:', item.file.url)}>
-                    <Text>{item.file.name}</Text>
+                {item.text && <View style={{ flexDirection: 'row' }}>
+                  <Text>{item.text}</Text>
+                  <Text style={{ marginTop: 6, fontSize: 12 }}>{renderTime(item.createdAt)}</Text>
+                </View>
+                }
+                {item.image && <View style={{ flexDirection: 'row' }}>
+                  <TouchableOpacity onPress={() => openImageModal(item.image)}>
+                    <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />
+
+                    <Text style={{ marginTop: 6, fontSize: 12, alignSelf: 'flex-end' }}>{renderTime(item.createdAt)}</Text>
                   </TouchableOpacity>
-                )}
-                {item.image && (
-                  <TouchableOpacity onPress={() => setUploadImage(item.image)}>
-
-    {isLoading ? (
-                  <ActivityIndicator size="small" color="#0000ff" />
-                ) : (
-                  <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />
-                )}
-                </TouchableOpacity>
-)}
-
-                {/* {item.image && <Image source={{ uri: item.image }} style={{ width: 200, height: 200 }} />} */}
-                {item.file?.url && <Image source={{ uri: item.file?.url }} style={{ width: 200, height: 200 }} />}
-                <Text>{renderTime(item.createdAt)}</Text>
+                </View>
+                }
               </View>
-              
+
             );
           }}
         />
+
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={isImageModalVisible}
+          onRequestClose={CloseImageModel}>
+          <View style={styles.modalContainer}>
+            <Image source={{ uri: selectedImage }} style={{ height: '100%', width: '100%' }} resizeMode="contain" >
+
+            </Image>
+            <TouchableOpacity onPress={CloseImageModel} style={styles.closeButton}>
+              <Text style={{ color: 'white' }}>Close</Text>
+            </TouchableOpacity>
+
+          </View>
+        </Modal>
+
+
         <View style={styles.inputContainer}>
-          <TouchableOpacity onPress={pickDocument}>
-            <Text>File</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            multiline={true}
-            placeholder="Type a message..."
-            value={inputMessage}
-            onChangeText={text => setInputMessage(text)}
-          />
-          <TouchableOpacity onPress={onSendMessage}>
-            <Text>Send</Text>
-          </TouchableOpacity>
+          {isLoading ? (
+            <View style={styles.messageContainer}>
+              <Text style={{ textAlign: 'center' }}>Uploading Image...</Text>
+            </View>
+          ) : (
+            <View style={styles.inputContainer}>
+              <TouchableOpacity onPress={pickDocument}>
+                <Text>File</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                multiline={true}
+                placeholder="Type a message..."
+                value={inputMessage}
+                onChangeText={text => setInputMessage(text)}
+              />
+              <TouchableOpacity onPress={onSendMessage} disabled={(!inputMessage && !selectedImage)}>
+                <Text>Send</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
-
     </View>
   );
 };
@@ -296,9 +301,14 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: 'grey'
   },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'grey',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   messageContainer: {
     padding: 10,
-    borderWidth: 1,
     borderColor: '#ccc',
     marginBottom: 10,
     maxWidth: '80%',
@@ -324,6 +334,14 @@ const styles = StyleSheet.create({
   input:
   {
     width: '85%'
-  }
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    padding: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
 });
 export default Chat;
